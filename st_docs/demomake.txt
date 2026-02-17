@@ -1,0 +1,191 @@
+Pour passer du stade de "programmeur" à celui de "demomaker" sur Atari ST, 
+il faut arrêter de voir la machine comme un ordinateur et commencer à la voir comme un instrument de musique électronique dont on détourne les composants.
+
+Voici les informations cruciales pour monter en grade.
+
+1. Les Résolutions : 
+
+Sous le capot du Shifter
+
+Le Shifter (la puce vidéo) interprète la RAM de trois manières différentes. 
+Le passage de l'une à l'autre se fait via le registre $FF8260 (octets de poids faible).
+
+Résolution	Pixels	Couleurs	Plans	Fréquence	Mémoire
+Basse (0)	320x200	16 / 512	4		50/60 Hz	32000 octets
+Medium (1)	640x200	4 / 512		2		50/60 Hz	32000 octets
+Haute (2)	640x400	2 (N&B)		1		71 Hz		32000 octets
+
+Basse Résolution : C'est le standard des jeux et démos. 
+L'entrelacement des 4 plans est complexe mais permet des effets de couleurs (Rasters).
+
+Medium : Très peu utilisée en démo, sauf pour des textes haute résolution ou certains jeux de stratégie.
+
+Haute : Nécessite le moniteur monochrome SM124. 
+Sa fréquence de 71 Hz la rend très stable, mais elle peu compatible avec les effets de bordures (Overscan) classiques du mode couleur.
+
+
+2. Le "Pre-shifting" (Technique de survie)
+
+C'est l'astuce n°1 des créateurs de jeux (comme Enchanted Land ou Lethal Xcess).
+Le 68000 est trop lent pour décaler un sprite pixel par pixel en temps réel à cause du format des bitplanes.
+
+Le concept :
+Au lieu de calculer le décalage pendant le jeu, on stocke en RAM les 16 positions horizontales possibles d'un sprite.
+
+Position 0 : Sprite original.
+Position 1 : Sprite décalé de 1 pixel à droite.
+...
+Position 15 : Sprite décalé de 15 pixels.
+
+Conséquence : 
+On utilise 16 fois plus de RAM, mais l'affichage devient une simple copie de mémoire (MOVE.L), ce qui est ultra-rapide.
+
+
+3. Le "Sync-Scrolling" (Défilement matériel)
+
+Sur Atari ST standard, il n'y a pas de registre pour scroller l'écran (contrairement au STE). 
+Pour faire défiler le décor, les demomakers utilisent des astuces de timing :
+
+L'adresse écran ($FF8201/03) : 
+
+On peut changer l'adresse de début de l'écran, mais elle doit être alignée sur 256 octets. 
+Cela permet un scroll vertical parfait, mais un scroll horizontal par blocs de 16 pixels uniquement.
+
+La "Rupture de ligne" : 
+En changeant la résolution (Basse -> Haute -> Basse) à un cycle précis en fin de ligne, 
+on peut forcer le Shifter à sauter ou à lire des octets supplémentaires, permettant un scroll horizontal au pixel près.
+
+
+4. Le "CPU Time" et la bordure (Le Debug du pauvre)
+
+Comment savoir si ton code d'effet demo est trop lent ? 
+On utilise le registre de couleur du fond ($FF8240).
+
+Extrait de code :
+
+main_loop:
+    bsr     wait_vbl
+    move.w  #$700,$ff8240    ; Bordure Rouge (Début du calcul)
+    bsr     draw_tunnel      ; Ta routine
+    move.w  #$000,$ff8240    ; Bordure Noire (Fin du calcul)
+    bra     main_loop
+	
+Si la zone rouge occupe tout l'écran, tu "frames" (tu dépasses 1/50ème de seconde).
+Si la zone rouge est petite, il te reste du temps CPU pour ajouter de la musique ou des sprites !
+
+
+5. Registres et Adresses Secrètes (ASCII Cheat Sheet)
+
+Voici les adresses que tout demomaker connaît par cœur :
+
+REGISTRE   | DESCRIPTION
+-----------|----------------------------------------------------------
+$FF8201.b  | Video Base High (Changer l'adresse de l'écran)
+$FF8203.b  | Video Base Mid
+$FF8205.b  | Video Pointer Low (STE seulement)
+$FF8209.b  | Video Address Counter (Savoir où est le faisceau en direct)
+$FF8240.w  | Palette Couleur 0 (Souvent la bordure)
+$FF8800.b  | YM2149 : Sélection du registre (0-12)
+$FF8802.b  | YM2149 : Écriture de la valeur (Volume, Fréquence, Bruit)
+$FFFA07.b  | Interrupt Enable A (Couper/Activer les Timers)
+$FFFA21.b  | Timer B Data (Nombre de lignes avant interruption)
+
+
+6. Le Format "Degas Elite" (.PI1)
+
+Pour tes graphismes, tu utiliseras souvent des fichiers .PI1. 
+
+En basse résolution, la structure est fixe :
+
+2 octets : Numéro de résolution (00 00).
+32 octets : La palette (16 mots de 2 octets).
+32000 octets : Les données d'image (bitplanes).
+
+Pour charger une image, on lit les 32 octets de palette vers $FF8240, puis on FREAD les 32000 octets directement vers l'adresse de l'écran (Physbase).
+
+
+7. Le son "Chiptune" (YM2149)
+
+Pour faire de la musique, on utilise le Timer C (200 Hz) ou le VBL (50 Hz).
+
+Une routine de musique classique (Player) fait trois choses à chaque appel :
+
+Lit la partition en RAM.
+Met à jour les registres de fréquence (période) des 3 canaux.
+Gère les enveloppes de volume.
+
+
+8. Le VBL (Vertical Blank)
+
+C'est l'instant sacré où le faisceau d'électrons finit de dessiner le bas de l'écran et remonte en haut.
+Fréquence : 50 Hz (Pal) ou 60 Hz (Ntsc).
+Utilité : C'est là qu'on change les palettes, qu'on lance la musique (une note par VBL) et qu'on synchronise le double buffering pour éviter le clignotement.
+Vecteur : $70.w 
+
+
+9. Les Rasters (Lignes de balayage)
+
+C'est l'art de changer la couleur du fond pendant que l'écran se dessine.
+Principe : Le CPU attend une ligne précise (via le Timer B) et change la couleur dans $FF8240.
+Résultat : Tu peux afficher des centaines de couleurs à l'écran au lieu de 16.
+
+Écran (Tube Cathodique)
++-----------------------+
+| Couleur Fond: Bleu    | <--- Ligne 1
+| Couleur Fond: Bleu    |
+| [ CHANGEMENT CPU ]    | <--- Timer B interrompt ici
+| Couleur Fond: Rouge   | <--- Ligne 100
++-----------------------+
+
+
+9. Le "Overscan" (Rupture de bordure)
+
+Par défaut, le ST a une bordure noire autour de l'image. 
+Les démos l'enlèvent souvent pour utiliser tout l'écran (Full Screen).
+
+Technique : 
+Il faut tromper le Shifter en changeant la fréquence (50/60 Hz) à un micro-instant précis de la ligne pour lui faire croire que la ligne n'est pas finie. 
+C'est du cycle-counting pur.
+
+
+10. Les Bitplanes (Plans de bits)
+
+Comme expliqué plus tôt, la mémoire n'est pas linéaire par pixel.
+Si tu ne veux qu'un affichage de texte d'une couleur, tu peux n'écrire que dans un seul bitplane (couleur indexée) pour gagner du temps (par blocs de 16 pixels puis step de 8 cotets).
+Pour plus de couleurs, combine avec une technique raster. 
+
+11. Les Outils du Demoscener (ASCII Map)
+
+[ CODE ] ----> [ ASSEMBLEUR ] (Devpac, GenST, VASM)
+   |                |
+   |                +-- Optimisation (Table de sinus pré-calculée)
+   |                +-- Utilisation de MOVEP pour la vidéo
+   v
+[ DATA ] ----> [ GRAPHIQUES ] (NeoChrome, Degas Elite)
+   |           [ MUSIQUE ]    (MaxYMiser, Protracker ST)
+   v
+[ PACKER ] --> [ COMPRESSION ] (Ice Crunched, UPX)
+               Réduit la taille sur la disquette.
+			   
+			   
+12. Résumé des Interruptions (Exceptions)
+
+En mode "sauvage", tu remplaces les vecteurs du 68000 pour tes propres besoins :
+
+Vecteur	Adresse	Usage
+HBL		$68		Horiz. Blank (rarement utilisé car moins précis que le Timer B).
+VBL		$70		Vertical Blank (Synchro globale).
+Timer B	$120	Généré par le MFP pour les rasters et l'overscan.
+Trap #1	$84		GEMDOS (Appels système).
+
+
+13. Le Double Buffering
+
+Pour un effet de demo, n'oublie jamais :
+
+Calculer + modifier la RAM dans le Buffer B.
+Afficher le Buffer A.
+À la prochaine VBL, Permuter (Swap).
+Si tu dessines directement sur l'écran affiché, l'utilisateur verra les lignes se tracer une par une, ce qui casse l'immersion (clignotement, affichage partiel, ...)
+
+Geoffroy / Hylst

@@ -1,0 +1,40 @@
+Comprendre la gestion de la vidéo sur Atari ST est crucial car c'est là que réside toute la difficulté (et le plaisir) de l'optimisation. 
+Contrairement aux systèmes modernes "Chunky" (où 1 octet = 1 pixel), l'Atari ST utilise des plans de bits entrelacés (Bitplanes).
+En basse résolution (320 * 200), vous avez 16 couleurs simultanées parmi une palette de 512 (STf) ou 4096 (STe). 
+
+1. La hiérarchie : Du Bit au PixelPour obtenir 16 couleurs, 
+il faut 2^4 combinaisons. On utilise donc 4 plans de bits.
+Le ST ne stocke pas les plans les uns après les autres en mémoire, il les entrelace par blocs de 16 pixels.
+
+2. Structure d'un bloc de 16 pixels
+En mémoire, l'écran est une suite de "mots" (16 bits). 
+Un groupe de 16 pixels horizontaux occupe 8 octets (4 mots de 16 bits) :
+Mot 0 : Contient le bit n°0 de chaque pixel du groupe.
+Mot 1 : Contient le bit n°1 de chaque pixel du groupe.
+Mot 2 : Contient le bit n°2 de chaque pixel du groupe.
+Mot 3 : Contient le bit n°3 de chaque pixel du groupe.
+
+Exemple : 
+Pour modifier le pixel le plus à gauche (Pixel 0) d'un bloc :
+Vous modifiez le bit 15 du Mot 0 (Plan 0).
+Vous modifiez le bit 15 du Mot 1 (Plan 1).
+Vous modifiez le bit 15 du Mot 2 (Plan 2).
+Vous modifiez le bit 15 du Mot 3 (Plan 3).
+
+3. Calcul de l'index de couleur
+L'index de la couleur (0 à 15) pour un pixel donné est reconstruit par le processeur vidéo (Shifter) en combinant les bits correspondants de chaque plan :
+
+Plan 3	Plan 2	Plan 1	Plan 0	Index Résultant (Binaire)	Couleur Palette
+0		0		0		1		%0001 (1)					Registre Couleur 1
+1		0		1		0		%1010 (10)					Registre Couleur 10
+
+4. La Palette (Couleurs indexées)
+L'index obtenu (0-15) pointe vers l'un des 16 registres de couleur situés à l'adresse $FF8240.
+Chaque registre est un mot de 16 bits codé en RGB 3 bits (pour le ST standard) :
+Bits 8-10 : Niveau de Rouge (0 à 7)
+Bits 4-6 : Niveau de Vert (0 à 7)
+Bits 0-2 : Niveau de Bleu (0 à 7)
+
+Note : Les bits 3, 7 et 11 sont utilisés sur le STE pour passer à 4 bits par composante (4096 couleurs).
+
+Geoffroy / Hylst

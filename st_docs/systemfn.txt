@@ -1,0 +1,80 @@
+Sur l'Atari ST, le système d'exploitation (le TOS) est structuré en couches d'abstractions, un peu comme un oignon. 
+Pour un programmeur demoscene, on essaie généralement de descendre le plus bas possible pour gagner de la vitesse, ou de tout court-circuiter.
+
+Voici la structure simplifiée en texte brut :
+
+Plaintext
+
++-------------------------------------------------------+
+|          APPLICATIONS (Jeux, Démos, Logiciels)        |
++-------------------------------------------------------+
+|  AES  |  VDI  |         (Interface graphique & dessin)|
++-------+-------+---------------------------------------+
+|        GEMDOS |         (Gestion fichiers et process) |  <-- TRAP #1
++---------------+---------------------------------------+
+|         BIOS  |         (E/S de base : clavier, disk) |  <-- TRAP #13
++---------------+---------------------------------------+
+|        XBIOS  |         (E/S matériel spécifique ST)  |  <-- TRAP #14
++---------------+---------------------------------------+
+|                 MATÉRIEL (68000, Shifter, YM2149...)  |
++-------------------------------------------------------+
+
+
+1. GEMDOS (The Graphics Environment Manager Disk Operating System)
+
+C'est la couche la plus haute qui s'occupe de la gestion "logique".
+
+Appel : TRAP #1
+
+Rôle : Manipulation de fichiers (ouvrir, lire, écrire), gestion de la mémoire (malloc/free), lecture du clavier, et exécution de programmes (Pterm, Pexec).
+
+Usage Demoscene : On l'utilise au début pour charger des données et à la fin pour quitter proprement.
+
+
+2. BIOS (Basic Input/Output System)
+C'est une couche de compatibilité générique.
+
+Appel : TRAP #13
+
+Rôle : Fonctions d'entrée/sortie simples et accès brut aux lecteurs. 
+Il gère les "devices" (CON: pour la console, AUX: pour le port série).
+
+Usage Demoscene : Très peu utilisé, sauf pour vérifier l'état du clavier de manière standard.
+
+
+3. XBIOS (Extended BIOS)
+C'est ici que l'Atari ST devient vraiment "un ST". 
+Cette couche contient les fonctions spécifiques au matériel de la machine.
+
+Appel : TRAP #14
+
+Rôle : 
+- Vidéo : Changer la résolution, changer l'adresse de l'écran (Setscreen), ...
+- Son : Piloter le chip sonore YM2149 (Giaccess).
+- Interruptions : Gérer les timers du MFP (Multi-Function Peripheral).
+
+Usage Demoscene : Massif. C'est le passage obligé avant de s'attaquer directement aux registres matériels.
+
+Comment on les appelle en Assembleur ?
+Le principe est toujours le même : 
+On empile les arguments, on empile le numéro de la fonction, et on déclenche l'interruption logicielle (TRAP).
+
+Exemple : Changer d'écran avec XBIOS 5 (Setscreen)
+
+    move.w  #0,-(sp)        ; Basse résolution (0)
+    move.l  a0,-(sp)        ; Adresse Physbase (affichage)
+    move.l  a1,-(sp)        ; Adresse Logbase (dessin)
+    move.w  #5,-(sp)        ; Numéro de la fonction XBIOS (5)
+    trap    #14             ; Appel XBIOS
+    lea     12(sp),sp       ; Nettoyage de la pile (12 octets)
+	
+	
+GEMDOS/BIOS sont lents car ils font beaucoup de vérifications.
+
+XBIOS est plus direct mais reste une fonction "système".
+
+Direct Hardware : 
+En demoscene, on finit souvent par ignorer le TOS pour écrire directement dans les registres (ex: $FF8240 pour les couleurs) 
+afin de gagner les quelques cycles CPU nécessaires pour maintenir 50 images par seconde.
+
+Geoffroy / Hylst

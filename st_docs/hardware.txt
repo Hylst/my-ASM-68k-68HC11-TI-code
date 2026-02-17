@@ -1,0 +1,127 @@
+Pour comprendre pourquoi l'Atari ST est une machine de légende en demoscene, il faut regarder sous le capot.
+Contrairement à son rival l'Amiga qui utilise des coprocesseurs spécialisés (le "Copper" ou le "Blitter"), 
+le ST(f) repose quasi exclusivement sur la puissance de son processeur central, le Motorola 68000.
+Son architecture est un mélange brillant de composants standards et de puces "custom" conçues par les ingénieurs d'Atari.
+
+Voici les piliers du hardware de l'Atari ST :
+
+1. Le Cerveau : Motorola 68000
+
+Le CPU est un Motorola 68000 cadencé à 8 MHz.
+
+Registres : 
+Il possède 8 registres de données (D0-D7) et 8 registres d'adresses (A0-A7) de 32 bits.
+
+Bus : 
+Bien que ses registres soient en 32 bits, son bus de données externe est en 16 bits.
+
+Esprit Démo : 
+C'est un processeur très élégant à programmer en assembleur. 
+Sur ST, chaque instruction prend un nombre de cycles multiple de 4, ce qui permet de synchroniser le code au cycle près avec le balayage de l'écran (le "cycle counting").
+
+
+2. La Vidéo : Le Shifter et le GLUE
+
+Contrairement à l'Amiga qui a des coprocesseurs dédiés (Copper/Blitter), le ST est plus "brut".
+
+Le Shifter : 
+C'est la puce qui lit la mémoire RAM et la convertit en signaux vidéo. 
+Elle gère les 3 résolutions (Basse, Moyenne, Haute) et la palette de 16 couleurs.
+
+Le GLUE (Generalized Logic Unit) : 
+Il génère les signaux de synchronisation (VBL pour le balayage vertical, HBL pour l'horizontal).
+
+Le MMU (Memory Management Unit) : 
+Il partage la RAM entre le CPU et le Shifter. 
+Le Shifter "vole" des cycles au CPU pour lire les données d'image.
+
+
+3. Le Son : Yamaha YM2149 (PSG)
+
+Le son du ST est produit par une processeur sonore basique / puce de synthèse "Square Wave" (ondes carrées).
+
+Registres : Accessibles via deux adresses ($FF8800 pour sélectionner le registre, $FF8802 pour écrire la valeur).
+
+Capacité : Pas de lecture de samples (échantillons) native, mais le CPU peut "forcer" les registres de volume pour simuler du son numérisé.
+3 Voix : 
+Trois canaux de sons mélodiques ou de bruit blanc.
+Limites : Pas de samples natifs (au début).
+
+Astuce Démo : 
+Les codeurs ont vite appris à manipuler les registres de volume à très haute vitesse pour simuler des samples 4 bits ou des ondes complexes (les fameux sons "chiptune" Sid-like).
+
+
+4. Le Gestionnaire : Le MFP 68901
+
+Le Multi-Function Peripheral est le couteau suisse du ST.
+
+Timers : Il possède 4 timers (A, B, C, D). 
+
+Timers du MFP :
+- Timer A : Souvent utilisé pour les effets sonores complexes.
+- Timer B : Le plus célèbre. Il compte les lignes de balayage de l'écran. 
+            C'est grâce à lui qu'on fait des "rasters" (changements de couleurs par ligne).
+- Timer C : Horloge système (200 Hz).
+- Timer D : Gestion de la vitesse du port série (RS-232) ou usage détourné.
+
+Le Timer B est vital : il peut être réglé pour se déclencher à chaque ligne de balayage de l'écran, permettant de changer la palette au milieu de l'image (effets de dégradés/rasters).
+
+Interruptions : Il gère le clavier, le port série, les erreurs, ou... un code custom !
+
+5. Organisation de la Mémoire (Memory Map)
+
+L'espace adressable de 16 Mo est organisé de façon fixe.
+La RAM de l'ATARI ST va de 512 Ko à 4 Mo, mais de base, généralement moins de 1 Mo disponibles.
+
+Voici les zones critiques pour un programmeur :
+
+Plage Adresse		Fonction
+$000000 - $000800	Vecteurs d'exceptions (Interruptions)
+$000800 - $...RAM 	Utilisateur (TOS, Buffer écran, Ton Code)
+$FA0000 - $FA002F	Registres du MFP 68901
+$FF8200 - $FF820D	Registres Vidéo (Adresse écran)
+$FF8240 - $FF825F	Palette de couleurs (16 registres de 2 octets)
+$FF8800 - $FF8802	Registres du chip sonore Yamaha
+
+
+6. Schéma Global de l'Architecture
+L'Atari ST est construit autour d'un bus de données 16 bits commun.
+
+    [ MOTOROLA 68000 ] <--- Cerveau (8 MHz)
+           |
+    +------+------+--------------------------+
+    |             |                          |
+[  MMU  ]     [ SHIFTER ]               [   GLUE   ]
+(Gestion RAM) (Vidéo/Couleurs)          (Logique Système)
+    |             |                          |
+    +------+------+                          |
+           |                                 |
+    [   RAM (ST-RAM)  ] <--------------------+
+    (512 Ko à 4 Mo)                          |
+           |                                 |
+    +------+------+--------------------------+
+    |             |                          |
+[  MFP  ]     [ YM2149 ]                [   ACIA   ]
+(Timers/Int)  (Son/PSG)                 (Clavier/MIDI)
+
+
+7. Assistance CPU par les Puces "Custom" (Le Trio de contrôle)
+
+Le ST utilise donc 3 puces principales pour assister le CPU :
+
+Le MMU (Memory Management Unit) : Il fait l'arbitrage. Comme la mémoire est partagée entre le CPU et la Vidéo, le MMU décide qui accède à la RAM à quel moment.
+Le SHIFTER (Vidéo) : Il récupère les données dans la RAM et les transforme en signaux pour l'écran. C'est lui qui gère les 4 plans de bits (bitplanes) en basse résolution.
+Le GLUE (Generalized Logic Unit) : C'est le "ciment" électronique. Il génère les signaux de synchronisation vidéo (VBL et HBL) et décode les adresses mémoire pour activer les autres composants.
+
+Facile mais dur ?
+
+Le hardware du ST est linéaire. 
+Il n'y a pas de liste de commandes complexe à envoyer à un GPU. 
+Tu veux changer une couleur ? Tu écris directement la valeur RGB dans $FF8240. 
+Tu veux dessiner ? Tu écris dans la RAM.
+
+La difficulté vient du fait que le CPU doit tout faire lui-même. 
+C'est pour cela que les routines comme un Bresenham doivent être ultra-optimisées : 
+chaque cycle CPU économisé permet d'afficher une ligne de plus dans ton tunnel !
+
+Geoffroy / Hylst

@@ -1,0 +1,75 @@
+Pour bien comprendre l'Atari ST, il faut voir son système d'exploitation, le TOS, comme un ensemble de couches. 
+Si le BIOS et le XBIOS s'occupent du matériel, l'AES et le VDI forment l'interface graphique (le GEM).
+
+Voici le détail de ces acronymes légendaires :
+
+1. TOS (The Operating System)
+
+C'est le nom global du système d'exploitation de l'Atari ST, stocké dans la puce ROM de la machine.
+Signification officieuse : Souvent appelé "Tramiel Operating System" (du nom de Jack Tramiel, patron d'Atari).
+
+Rôle > C'est le chef d'orchestre. Il englobe tout : 
+la gestion des disques (GEMDOS), les entrées/sorties (BIOS/XBIOS) et l'interface graphique (GEM).
+
+En Demoscene : On dit souvent qu'on "sort du TOS" quand on prend le contrôle total de la machine.
+
+
+2. VDI (Virtual Device Interface)
+
+C'est la couche graphique de bas niveau. 
+C'est elle qui fait le pont entre le logiciel et le matériel (écran, imprimante, traceur).
+
+Rôle > Fournir des fonctions de dessin primitives : 
+tracer des lignes, des cercles, remplir des polygones ou afficher du texte.
+
+Le concept "Virtuel" : Le VDI est censé être indépendant du matériel. 
+Un programme écrit pour le VDI devrait théoriquement s'afficher de la même manière sur un écran monochrome ou couleur sans changer le code.
+
+En Demoscene : On l'évite comme la peste ! 
+Le VDI est beaucoup trop lent car il fait des calculs de coordonnées universelles et gère énormément de cas particuliers. 
+On préfère largement les routines de lignes en assembleur optimisées.
+
+
+3. AES (Application Environment Services)
+
+C'est la couche la plus haute, celle qui gère l'aspect graphique de l'OS du ST.
+
+Rôle > Elle gère tout ce qui est interactif :
+-Les fenêtres (ouvrir, fermer, redimensionner).
+-Les menus déroulants en haut de l'écran.
+-Les boîtes de dialogue et les formulaires.
+-Les icônes du bureau.
+-Le multitâche préventif (très limité, pour les accessoires de bureau .ACC).
+
+En Demoscene : On l'utilise uniquement pour afficher un message d'erreur si la machine n'a pas assez de RAM, ou pour quitter proprement le programme.
+
+Résumé de la hiérarchie GEM
+
+L'AES et le VDI forment ensemble ce qu'on appelle le GEM (Graphical Environment Manager), créé par Digital Research.
+
+Composant	Ce qu'il gère				Analogie
+AES			L'interface utilisateur		Le décor et les boutons
+VDI			Le dessin pur				Le pinceau et la toile
+TOS			La machine entière			Les fondations du bâtiment
+
+Pour un codeur de démos ou de jeux sur Atari ST, le système est divisé en deux mondes : 
+le monde "propre" (GEM) qu'on utilise pour les outils, et le monde "sauvage" (Hardware) qu'on utilise pour la performance.
+
+5. Le GEM (Graphical Environment Manager)
+
+C’est l'interface fenêtrée. En assembleur, on ne l'utilise que pour l'initialisation ou pour faire des utilitaires (éditeurs de sprites, de musique, ...).
+
+[ GEM ] = [ AES ] + [ VDI ]
+  |          |        |
+  |          |        +--[ VDI ] : Virtual Device Interface.
+  |          |             Dessin vectoriel (lignes, cercles). 
+  |          |             LENT car il calcule tout via des coordonnées 
+  |          |             abstraites avant de convertir en pixels.
+  |          |
+  |          +-----------[ AES ] : Application Environment Services.
+  |                        Gestion des fenêtres, menus, souris et
+  |                        boîtes de dialogue.
+  |
+  +---[ GEMDOS ] : La base. Gestion des fichiers (TRAP #1).
+
+Geoffroy / Hylst
