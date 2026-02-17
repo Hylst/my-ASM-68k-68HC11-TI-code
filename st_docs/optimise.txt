@@ -1,0 +1,171 @@
+ATARI ST DEMO-CODING: OPTIMIZATION TRICKS
+
+"Counting cycles until the screen bleeds"
+
+1. LE PROCESSEUR (MC68000 @ 8MHZ)
+Sur ST, le CPU et le Shifter (vidéo) se partagent le bus. 
+Le CPU ne peut accéder à la RAM qu'un cycle sur deux. 
+C'est ce qu'on appelle les "Wait States". 
+Toute instruction est donc arrondie au multiple de 4 cycles supérieur.
+
+
+2. Tables de Pré-calcul (Look-Up Tables - LUT)
+
+Règle d'or : Si tu peux le calculer avant, fais-le.
+
+Sinus/Cosinus : Jamais de calcul en temps réel. 
+On génère une table de sinus au lancement de la démo.
+
+Coordonnées 3D : Pré-calculer 1/Z pour éviter les divisions (DIVS)
+
+Distorsions : Pré-calculer les décalages d'offsets pour les textures.
+
+Tables de multiplication par 160 (Offset écran) :
+Le calcul Y * 160 (pour trouver la ligne écran) est coûteux. Même avec des LSL et ADD, cela prend du temps.
+Solution : Créez une Y_Table de 200 mots contenant déjà les valeurs pré-calculées : 0, 160, 320, 480....
+Accès : LEA Y_Table, A0 puis MOVE.W (A0, D1.w*2), D1. C'est l'un des moyens les plus rapides pour positionner un objet verticalement.
+
+
+3. Le "Pre-shifting" (Décalage de bits)
+
+Le 68000 est lent pour décaler les bits (LSR, LSL, ROR). 
+Pour un sprite ou un scrolltext fluide :
+
+On pré-calcule 16 versions du sprite en RAM, décalées de 0 à 15 pixels.
+Coût : x16 en mémoire.
+
+Gain : Vitesse de copie brute (affichage immédiat sans calcul de bits).
+
+
+4. Déroulage de boucle (Loop Unrolling)
+
+La gestion de boucle DBF D0, label coûte 12 cycles par tour.
+
+; LENT (80 cycles pour 8 copies)
+    moveq #7,d0
+loop:
+    move.w (a0)+,(a1)+
+    dbf d0,loop
+
+; RAPIDE (32 cycles pour 8 copies)
+    move.w (a0)+,(a1)+
+    move.w (a0)+,(a1)+
+    ... (x8)
+	
+	
+5. OPTIMISATIONS DU SHIFTER (VIDÉO)
+
+Le Shifter de l'Atari ST est passif (pas de blitter sur STF). 
+Il lit la mémoire en Bitplanes entrelacés.
+
+Accès aux Bitplanes :
+L'écran du ST est en 4 plans entrelacés. Si vous dessinez un objet qui n'a besoin que de 2 couleurs (ex: blanc sur noir), ne travaillez que sur le Plan 0.
+L'écran est organisé ainsi : P0, P1, P2, P3 (4 mots de 16 bits pour 16 pixels).
+Si ton sprite n'utilise que 2 couleurs, ne dessine que dans 1 plan. 
+
+Astuce "Vanish" : 
+En ne remplissant que le Plan 0, vous laissez les Plans 1, 2 et 3 intacts. 
+Vous pouvez donc afficher un décor complexe en fond (utilisant les plans 1, 2, 3) et faire passer votre sprite "par-dessus" sans effacer le fond, 
+simplement en manipulant le registre de palette.
+
+Tu 'divises par 4' le 'temps de calcul'.
+
+Utilisez MOVEM.L (Move Multiple) pour envoyer des blocs de données vers l'écran. 
+C'est l'instruction la plus rapide du 68000 pour saturer le bus.
+
+
+6. Le "Dirty Rectangles" (Effaçage sélectif)
+
+Ne jamais faire un CLS (Clear Screen) complet (32 Ko).
+Stockez les positions (x,y) des objets de la frame précédente.
+Effacez uniquement ces zones.
+S'il s'agit de pixels isolés, stockez leur adresse relative.
+
+
+7. LES TRUCS DE "SORCIERS" (HARDWARE HACKS)
+
+A. Le "Fullscreen" (Overstore)
+
+Le ST possède des bordures noires. 
+Les codeurs ont découvert qu'en changeant la fréquence de rafraîchissement (50Hz/60Hz) à un cycle précis, on "trompe" le Shifter et on ouvre les bordures latérales.
+
+B. Le Sync-Scrolling
+
+Pour scroller tout l'écran sans Blitter :
+
+On décale l'adresse de l'écran ($FF8201) octet par octet.
+Comme le STF n'autorise que des sauts de 256 octets, on utilise des "lignes de padding" de longueurs différentes pour recaler l'image au pixel près.
+
+C. RÉSUMÉ DES CYCLES (TRICKS)
+
+Action			Mauvaise pratique	Optimisation				Gain	
+Effaçage		MOVE.W #0, (A0)+	CLR.L (A0)+ ou MOVEM.L		2x à 4x
+Multiplication	MULU #10, D0		LSL.W #3, D0 + LSL.W #1, D	13x
+Test à zéro		CMP.W #0, D0		TST.W D0					1.5x
+Copie rapide	MOVE.W (A0)+, (A1)+	MOVEM.L (A0)+, D0-D7/A2-A65	x5. 
+
+
+8. STRUCTURE TYPIQUE D'UNE BOUCLE D'EFFET
+
+1. Wait_VBL         ; Synchronisation avec le balayage écran
+2. Swap_Buffers      ; Double buffering (Physical vs Logical)
+3. Erase_Objects     ; Effaçage sélectif (Dirty Rects)
+4. Update_Logic      ; Calcul des positions (Sinus, 3D)
+5. Draw_Gfx          ; Tracé optimisé (MOVEM, Pre-shifted)
+6. Jump to 1.
+
+En démo, l'élégance du code ne compte pas. Seul le résultat à l'écran et le nombre de cycles épargnés comptent.
+
+
+9. L'utilisation détournée de la Pile (Stack Pointer)
+
+Le 68000 possède une instruction extrêmement rapide pour lire des données : MOVE.L (SP)+, Dn.
+En "détournant" le pointeur de pile (A7) vers vos données (une image ou un sprite), vous gagnez des cycles car l'instruction est plus courte et plus rapide que MOVE.L (A0)+, Dn.
+
+Technique : Sauvegardez A7 dans une variable, pointez A7 sur vos données graphiques, et utilisez MOVEM.L (SP)+, D0-D7/A0-A6 pour "pomper" les données vers les registres.
+
+Danger : Les interruptions (VBL, Timer B) utilisent la pile. Vous devez absolument couper les interruptions (MOVE.W #$2700, SR) pendant cette opération, 
+sinon le processeur va écrire l'adresse de retour au milieu de vos données graphiques et tout faire planter.
+
+
+10. Le "Self-Modifying Code" (SMC)
+Sur 68000, le cache d'instructions n'existe pas. Le processeur lit le code directement en RAM. On peut donc modifier le code pendant qu'il s'exécute.
+
+Application (Sprite avec masque) : Au lieu d'avoir une routine générique qui fait AND (masque) puis OR (couleur), on génère en RAM une routine spécifique pour chaque sprite.
+
+Si un bloc de pixels du sprite est vide (transparent), la routine SMC n'écrira rien. S'il est plein, elle contiendra une instruction MOVE.L.
+
+Gain : On supprime tous les tests (CMP, BEQ) et on ne traite que les pixels visibles.
+
+
+11. Le "Zig-Zag" Rendering
+Bien que le 68000 n'ait pas de cache de données, le bus mémoire du ST est optimisé pour les lectures séquentielles.
+Lors de l'effaçage ou du tracé de gros objets, essayez de travailler dans le sens de la mémoire.
+Si vous faites défiler un écran (Scrolling), il est souvent plus rapide de déplacer de gros blocs avec MOVEM.L 
+que de recalculer chaque pixel, quitte à copier un peu trop de données et à "cliper" ensuite.
+
+
+12. Registres : Le "Register Caching"
+Les registres d'adresse (A0-A6) et de données (D0-D7) sont vos ressources les plus précieuses.
+
+Ne rechargez jamais une adresse système (comme $FF8240 pour la palette) dans une boucle. Gardez-la dans un registre An pendant toute la durée de la routine.
+
+Exemple : Si vous changez souvent la couleur de fond pour des Rasters, mettez $FF8240 dans A6. Ensuite, un MOVE.W D0, (A6) ne prend que 8 cycles, contre 16 ou 20 cycles pour un accès absolu.
+
+
+13. Les instructions "gratuites"
+Certaines instructions coûtent le même nombre de cycles tout en faisant plus de travail :
+
+ADDQ / SUBQ (Quick) : Pour les valeurs de 1 à 8, c'est l'instruction de calcul la plus rapide.
+
+MOVEQ : Pour charger une valeur entre -128 et 127 dans un registre.
+
+DBF : Le saut de boucle est "presque" gratuit si vous structurez bien votre code pour que le saut soit la branche la plus probable.
+
+
+14. Priorités pour un code omptimisé :
+LUT (Tables) partout : Sinus, divisions, offsets, même les masques de bits.
+MOVEM.L : C'est votre compresseur de bus. Utilisez-le pour tout transfert de plus de 3 mots.
+No Branches : Évitez les BSR/RTS dans les boucles critiques. "Inlinez" votre code (copier-coller le code de la routine directement au lieu de l'appeler).
+
+Geoffroy / Hylst
